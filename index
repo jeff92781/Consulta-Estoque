@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Conferência de Pedido × Estoque</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: sala de planejamento — direta, sem enfeite, decisão por item
+   IDEA: a ficha de separação do CD: pedido de um lado, lote e endereço do outro
+   PICTURE: a tabela de atendimento por item é a peça central, com veredito na margem
+   COLOUR and TYPE: pedra #e7e4df, preto, tijolo #c8371e; noite #171513; Schibsted Grotesk
+   LAYOUT: barra de filial prioritária no topo, entradas à esquerda, resultado à direita */
+:root{color-scheme:light dark;--bg:light-dark(#e7e4df,#171513);--ink:light-dark(#111,#ece8e2);--panel:light-dark(#fff,#221f1c);--line:light-dark(#cfcac2,#3a3531);--mute:light-dark(#5e5850,#a39c93);--brick:#c8371e;--ok:light-dark(#1d6b3a,#5fc086);--warn:light-dark(#9a5b00,#f0a83a);--bad:light-dark(#b02a14,#ff7a62);--soft:light-dark(#f3f1ed,#2a2622)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Schibsted Grotesk",system-ui,sans-serif;overflow-x:clip}
+header{background:light-dark(#111,#0d0c0b);color:#f4f1ec;padding:18px max(4vw,16px);display:flex;flex-wrap:wrap;gap:14px 28px;align-items:center;justify-content:space-between}
+h1{font-size:clamp(22px,3vw,32px);line-height:1.05;margin:0;font-weight:700}
+h1 small{display:block;font-size:14px;font-weight:400;color:#b9b2a8;margin-top:6px}
+.prio{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.prio label{font-size:14px;color:#d9d3ca}
+select,input[type=text],textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:9px 10px;min-height:44px}
+header select{background:#2a2622;color:#fff;border-color:#4a443e;font-weight:700}
+button,.btn{font:inherit;font-size:15px;font-weight:500;min-height:44px;padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+button.pri,.btn.pri{background:var(--brick);border-color:var(--brick);color:#fff}
+button:focus-visible,.btn:focus-within,select:focus-visible,textarea:focus-visible,input:focus-visible{outline:3px solid var(--brick);outline-offset:2px}
+.wrap{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:20px;padding:20px max(4vw,16px) 48px;max-width:1500px;margin:0 auto}
+@media(max-width:900px){.wrap{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:16px}
+.card h2{font-size:18px;margin:0 0 10px}
+.hint{font-size:14px;color:var(--mute);margin:6px 0}
+.drop{border:2px dashed var(--line);border-radius:8px;padding:16px;text-align:center;font-size:14px;color:var(--mute);cursor:pointer;display:block}
+.drop.over{border-color:var(--brick);background:var(--soft)}
+.drop input{display:none}.drop b{color:var(--ink)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{text-align:left;font-weight:700;border-bottom:2px solid var(--ink);padding:8px 6px;white-space:nowrap}
+td{border-bottom:1px solid var(--line);padding:8px 6px;vertical-align:top}
+.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.fil td{padding:6px 4px}.fil input{min-height:36px;padding:4px 8px;width:100%;font-size:15px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.kpi b{display:block;font-size:clamp(24px,3vw,32px);line-height:1.1}.kpi span{font-size:13px;color:var(--mute)}
+.head{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+.head h2{font-size:clamp(20px,2.4vw,26px);margin:0}.head p{margin:0;color:var(--mute);font-size:14px}
+.chip{display:inline-block;font-size:13px;font-weight:700;padding:3px 8px;border-radius:4px;white-space:nowrap;border:1px solid currentColor}
+.s-ok{color:var(--ok)}.s-tr{color:var(--warn)}.s-mx{color:var(--warn)}.s-no{color:var(--bad)}
+.alloc{margin:0;padding:0;list-style:none}.alloc li{padding:2px 0}
+.lote{font-weight:700}.end{background:var(--soft);padding:1px 6px;border-radius:4px;white-space:nowrap}
+.tag{font-size:12px;color:var(--ok);font-weight:700;margin-left:4px}
+details{margin-top:6px}summary{cursor:pointer;font-size:13px;color:var(--mute);min-height:28px}
+.mini{font-size:13px}.mini td,.mini th{padding:4px 5px}.mini th{border-bottom-width:1px}
+.cover{color:var(--ok);font-weight:700}
+.scroll{overflow-x:auto}
+.empty{padding:40px 20px;text-align:center;color:var(--mute)}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 16px;border-radius:6px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}.toast.on{opacity:1}
+@media(prefers-reduced-motion:reduce){.toast{transition:none}}
+textarea{width:100%;min-height:90px;resize:vertical}
+.res-desc{font-size:13px;color:var(--mute)}
+@media(max-width:600px){table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:10px}.stack td{display:flow-root;border:0;padding:3px 0;padding-inline-start:7em;text-align:start}.stack td::before{content:attr(data-l);float:inline-start;width:6.5em;margin-inline-start:-7em;color:var(--mute);font-weight:500}.stack td:empty{display:none}.stack .n{text-align:start}}
+</style><script>new MutationObserver(()=>{for(const c of document.querySelectorAll('.stack td:not([data-l])')){let i=0,p=c;while(p=p.previousElementSibling)i+=p.colSpan;c.dataset.l=c.closest('table').rows[0].cells[i]?.textContent||''}}).observe(document,{childList:true,subtree:true})</script>
+</head><body>
+<header>
+  <h1>Conferência de Pedido × Estoque<small>Lote único que cobre a quantidade total · filial prioritária primeiro · transferência quando necessário</small></h1>
+  <div class="prio"><label for="prio">Filial prioritária</label><select id="prio"><option value="">— importe o estoque —</option></select></div>
+</header>
+<div class="wrap">
+<aside>
+  <section class="card">
+    <h2>1. Estoque (intranet → Excel)</h2>
+    <label class="drop" id="dropX"><input type="file" id="fileX" accept=".xlsx,.xls,.csv" multiple><b>Solte o Excel aqui</b> ou clique para escolher<br>Pode ser 1 arquivo com as 4 filiais ou 1 por filial</label>
+    <div class="row"><label class="mini"><input type="checkbox" id="replaceAll"> Substituir a base inteira</label></div>
+    <p class="hint">Sem a opção marcada, só as filiais presentes no arquivo são substituídas. Colunas lidas pelo cabeçalho: Filial, Produto, Descrição, Armaz., Lote, Endereço, Saldo Lote, Empenho, Disponível.</p>
+    <details><summary>Ou colar direto da tela da intranet</summary>
+      <textarea id="pasteX" placeholder="Selecione a tabela na intranet (com o cabeçalho), copie e cole aqui"></textarea>
+      <div class="row"><button id="btnPaste">Importar colagem</button></div></details>
+    <div id="stockInfo"></div>
+  </section>
+  <section class="card">
+    <h2>2. Pedido</h2>
+    <label class="drop" id="dropP"><input type="file" id="fileP" accept="application/pdf"><b>Solte o PDF do pedido</b> ou clique para escolher</label>
+    <details><summary>Ou digitar itens manualmente</summary>
+      <textarea id="manual" placeholder="Um item por linha: CÓDIGO ; QUANTIDADE&#10;E1803016PT ; 15"></textarea>
+      <div class="row"><button id="btnManual">Conferir itens</button></div></details>
+  </section>
+</aside>
+<main id="out"><div class="card empty">Importe o estoque e carregue o PDF do pedido para ver o atendimento por item.</div></main>
+</div>
+<div class="toast" id="toast"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script>
+{
+const $=s=>document.querySelector(s);
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let stock=LS.get('cp_stock',[]);           // [{f,cod,ant,desc,arm,lote,end,saldo,emp,disp}]
+let meta=LS.get('cp_meta',{});             // {filial:{at:iso}}
+let names=LS.get('cp_names',{});           // {filial:"Lapa"}
+let prio=LS.get('cp_prio','');
+let order=null, lastRes=[];
+const fmt=n=>(Math.round(n*100)/100).toLocaleString('pt-BR',{maximumFractionDigits:2});
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fname=f=>names[f]?`${f} · ${names[f]}`:f;
+const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('on'),2600)};
+const norm=s=>String(s??'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/gi,'').toLowerCase();
+function num(v){if(typeof v==='number')return v;let s=String(v??'').trim().replace(/\s/g,'');if(!s)return 0;
+  if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');else if(/^-?\d{1,3}(\.\d{3})+$/.test(s))s=s.replace(/\./g,'');
+  const n=parseFloat(s);return isNaN(n)?0:n}
+const padF=v=>{const s=String(v??'').trim();return /^\d+$/.test(s)&&s.length<4?s.padStart(4,'0'):s};
+
+/* ---------- ESTOQUE ---------- */
+const COLS={f:['filial'],cod:['produto','codigo','cod'],ant:['codantigo'],desc:['descricao'],arm:['armaz','armazem'],lote:['lote'],end:['endereco'],saldo:['saldolote','saldo'],emp:['empenho'],disp:['disponivel']};
+function rowsToStock(rows){
+  const hi=rows.findIndex(r=>{const h=r.map(norm);return h.includes('produto')&&h.includes('lote')});
+  if(hi<0)throw new Error('Cabeçalho não encontrado (precisa ter "Produto" e "Lote").');
+  const h=rows[hi].map(norm),idx={};
+  for(const k in COLS)idx[k]=h.findIndex(x=>COLS[k].includes(x));
+  if(idx.f<0)throw new Error('Coluna "Filial" não encontrada.');
+  const out=[];
+  for(const r of rows.slice(hi+1)){const g=k=>idx[k]>=0?r[idx[k]]:'';const cod=String(g('cod')).trim().toUpperCase();if(!cod||!String(g('lote')).trim()||/^total/i.test(String(g('desc'))))continue;
+    const saldo=num(g('saldo')),emp=num(g('emp'));const disp=idx.disp>=0?num(g('disp')):saldo-emp;
+    out.push({f:padF(g('f')),cod,ant:String(g('ant')).trim(),desc:String(g('desc')).trim(),arm:String(g('arm')).trim(),lote:String(g('lote')).trim(),end:String(g('end')).trim(),saldo,emp,disp})}
+  return out}
+function mergeStock(rows){
+  const fs=[...new Set(rows.map(r=>r.f))];
+  stock=$('#replaceAll').checked?rows:stock.filter(r=>!fs.includes(r.f)).concat(rows);
+  const now=new Date().toISOString();if($('#replaceAll').checked)meta={};fs.forEach(f=>meta[f]={at:now});
+  LS.set('cp_stock',stock);LS.set('cp_meta',meta);renderStock();if(order)run();
+  toast(`${rows.length} lotes importados · filiais ${fs.join(', ')}`)}
+async function readExcel(files){
+  try{let all=[];for(const f of files){const buf=new Uint8Array(await f.arrayBuffer());
+      // exportação da intranet: texto com tabulação salvo como .xls — lê como texto para manter "1.187" = mil cento e oitenta e sete
+      const bin=(buf[0]===0xD0&&buf[1]===0xCF)||(buf[0]===0x50&&buf[1]===0x4B);
+      if(!bin){let txt;try{txt=new TextDecoder('utf-8',{fatal:true}).decode(buf)}catch(e){txt=new TextDecoder('windows-1252').decode(buf)}
+        const sep=txt.includes('\t')?'\t':';';all=all.concat(rowsToStock(txt.replace(/^﻿/,'').split(/\r?\n/).filter(l=>l.trim()).map(l=>l.split(sep))));continue}
+      const wb=XLSX.read(buf,{type:'array'});
+      for(const sn of wb.SheetNames){const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:''});try{all=all.concat(rowsToStock(rows))}catch(e){if(wb.SheetNames.length===1)throw e}}}
+    if(!all.length)throw new Error('Nenhuma linha de estoque encontrada.');mergeStock(all)}catch(e){toast('Erro: '+e.message)}}
+function renderStock(){
+  const fs=[...new Set(stock.map(r=>r.f))].sort();
+  if(!fs.includes(prio))prio=fs[0]||'';
+  $('#prio').innerHTML=fs.length?fs.map(f=>`<option value="${esc(f)}"${f===prio?' selected':''}>${esc(fname(f))}</option>`).join(''):'<option value="">— importe o estoque —</option>';
+  if(!fs.length){$('#stockInfo').innerHTML='<p class="hint">Nenhum estoque carregado ainda.</p>';return}
+  $('#stockInfo').innerHTML=`<table class="fil" style="margin-top:12px"><thead><tr><th>Filial</th><th>Nome</th><th class="n">Lotes</th><th class="n">Atualizado</th></tr></thead><tbody>${fs.map(f=>{const L=stock.filter(r=>r.f===f&&r.disp>0);const at=meta[f]?.at?new Date(meta[f].at):null;
+    return `<tr><td>${esc(f)}</td><td><input type="text" data-name="${esc(f)}" value="${esc(names[f]||'')}" placeholder="ex.: Lapa" aria-label="Nome da filial ${esc(f)}"></td><td class="n">${L.length}</td><td class="n">${at?at.toLocaleDateString('pt-BR')+' '+at.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'—'}</td></tr>`}).join('')}</tbody></table>
+    <div class="row"><button id="btnClear">Limpar base</button></div>`;
+  document.querySelectorAll('[data-name]').forEach(i=>i.onchange=()=>{names[i.dataset.name]=i.value.trim();LS.set('cp_names',names);renderStock();if(order)run()});
+  $('#btnClear').onclick=()=>{if($('#btnClear').dataset.c){stock=[];meta={};LS.set('cp_stock',stock);LS.set('cp_meta',meta);renderStock();if(order)run()}else{$('#btnClear').dataset.c=1;$('#btnClear').textContent='Confirmar limpeza'}}}
+
+/* ---------- PEDIDO (PDF) ---------- */
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+function linesFromItems(items){const rows=[];
+  for(const it of items){if(!it.str||!it.str.trim())continue;const y=it.transform[5],x=it.transform[4];let r=rows.find(r=>Math.abs(r.y-y)<3);if(!r){r={y,cells:[]};rows.push(r)}r.cells.push({x,s:it.str})}
+  rows.sort((a,b)=>b.y-a.y);return rows.map(r=>r.cells.sort((a,b)=>a.x-b.x).map(c=>c.s).join(' ').replace(/\s+/g,' ').trim())}
+const Q='(\\d{1,3}(?:\\.\\d{3})*(?:,\\d+)?|\\d+)',NCM='(\\d{4}\\.?\\d{2}\\.?\\d{2})',COD='([A-Z0-9][A-Z0-9.\\-]{4,19})';
+// A) Pedido interno Protheus: ITEM CODIGO DESC NCM UM QTD   B) Orçamento Qubex: ITEM CODIGO DESC NCM QTD UM
+// C) Consulta Pedidos de Vendas (SC6): ITEM CODIGO - DESC  N BB TAM  SALDO  EMISSÃO ... SITUAÇÃO
+const RXA=new RegExp(`(?:^|\\s)(\\d{1,3})\\s+${COD}\\s+(.+?)\\s+${NCM}\\s+([A-Z]{2,3})\\s+${Q}\\s`);
+const RXB=new RegExp(`^(\\d{1,3})\\s+${COD}\\s+(.+?)\\s+${NCM}\\s+${Q}\\s+([A-Z]{2,3})\\b`);
+const RXC=new RegExp(`^(\\d{1,3})\\s+${COD}\\s+-\\s+(.+?)\\s+(\\d+)\\s+([A-Z]{1,3})\\s+${Q}\\s+${Q}\\s+\\d{2}\\/\\d{2}\\/\\d{4}(.*)$`);
+function lances(desc,qty){const m=desc.match(/LANCE\s*\(([^)]*)\)/i);if(!m)return null;const p=[];
+  for(const g of m[1].matchAll(/(\d+)\s*x\s*[A-Z]*\s*(\d+(?:[.,]\d+)?)/gi)){const n=+g[1],c=num(g[2]);for(let i=0;i<n;i++)p.push(c)}
+  const tot=p.reduce((a,b)=>a+b,0);return p.length&&Math.abs(tot-qty)<0.01?p:null}
+function parseOrder(L){
+  const items=[];let tipo='';
+  for(let i=0;i<L.length;i++){const l=L[i];let m;
+    if(m=l.match(RXC)){const n=+m[4],tam=num(m[6]),qty=n*tam;let desc=m[3];const nx=L[i+1]||'';
+      if(nx&&!RXC.test(nx)&&!/^\d+(\s+TOTAL.*)?$/i.test(nx)&&!/^\d{4}\s+\d{6}/.test(nx))desc+=' '+nx;
+      const sit=(m[8].match(/(Faturado|Liberado|Bloqueado|Aberto|Pendente|Parcial)\w*/i)||[''])[0];
+      items.push({item:m[1],cod:m[2].toUpperCase(),desc,um:'MT',qty,pieces:Array(n).fill(tam),obs:[`lance ${n}×${fmt(tam)}`,num(m[7])?`saldo ${fmt(num(m[7]))}`:'',sit].filter(Boolean).join(' · ')});tipo='Consulta de pedido de venda';continue}
+    if(m=l.match(RXB)){const qty=num(m[5]);items.push({item:m[1],cod:m[2].toUpperCase(),desc:m[3],um:m[6],qty,pieces:lances(m[3],qty)});tipo=tipo||'Orçamento';continue}
+    if(m=l.match(RXA)){const qty=num(m[6]);items.push({item:m[1],cod:m[2].toUpperCase(),desc:m[3],um:m[5],qty,pieces:lances(m[3],qty)});tipo=tipo||'Pedido interno'}}
+  const g=re=>{for(const l of L){const m=l.match(re);if(m)return m[1].trim()}return''};
+  const hc=L.map(l=>l.match(/^(\d{4})\s+(\d{6})\s+(.+?)\s+(\d{2}\/\d{2}\/\d{4})/)).find(Boolean);
+  const fi=L.findIndex(l=>/\bFILIAL$/.test(l));
+  return{tipo,items,
+    num:hc?hc[2]:g(/N[úu]mero:\s*(\S+)/i)||g(/OR[ÇC]AMENTO\s+(\d+)/i),
+    em:hc?hc[4]:g(/Emiss[ãa]o:?\s*(\d{2}\/\d{2}\/\d{4})/i),
+    cli:hc?hc[3]:g(/^\d{4,}\/\d{2}\s+(.+?)\s+\d{11,14}\b/)||g(/^\d{4,}-\d{2}\s*:\s*(.+?)\s+\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/),
+    fil:hc?hc[1]:(fi>=0&&/^\d{4}$/.test(L[fi+1]||'')?L[fi+1]:'')}}
+window.__parseOrder=parseOrder;
+async function readPdf(file){
+  try{const doc=await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;let L=[];
+    for(let p=1;p<=doc.numPages;p++){const c=await(await doc.getPage(p)).getTextContent();L=L.concat(linesFromItems(c.items))}
+    const o=parseOrder(L);if(!o.items.length)throw new Error('Nenhum item reconhecido no PDF.');
+    order={...o,file:file.name};run()}
+  catch(e){toast('Erro no PDF: '+e.message)}}
+
+/* ---------- MOTOR DE ATENDIMENTO ---------- */
+// cada peça (lance) precisa sair inteira de UM lote; best-fit = menor lote que cobre (preserva lotes grandes, exato primeiro)
+// strict=true: só lotes que deixam sobra (disp > lance); lote exato fica como última opção
+function tryFill(pieces,lots,strict){const pool=lots.map(l=>({l,rem:l._rem})),al=[],left=[];
+  for(const q of [...pieces].sort((a,b)=>b-a)){const c=pool.filter(p=>strict?p.rem>q+1e-9:p.rem>=q-1e-9).sort((a,b)=>a.rem-b.rem)[0];if(c){c.rem-=q;al.push({l:c.l,q})}else left.push(q)}
+  return{al,left}}
+function commit(al){al.forEach(a=>a.l._rem-=a.q)}
+function run(){
+  if(!order)return;const fs=[...new Set(stock.map(r=>r.f))].sort();const others=fs.filter(f=>f!==prio);
+  stock.forEach(r=>r._rem=r.disp);
+  const R=order.items.map(it=>{const lots=stock.filter(r=>r.cod===it.cod&&r.disp>0);
+    return{...it,pieces:it.pieces||[it.qty],lots,st:'',al:[],left:[],via:'',big:[...lots].sort((a,b)=>b.disp-a.disp)[0],descE:lots[0]?.desc||''}});
+  const by=(r,f)=>r.lots.filter(l=>l.f===f&&l._rem>0);
+  const fill=(r,f,strict)=>{const x=tryFill(r.pieces,by(r,f),strict);return x.left.length?null:x};
+  const set=(r,st,al,via)=>{r.st=st;r.al=al;r.via=via||'';commit(al)};
+  // 1) filial prioritária com sobra
+  const pend=[];R.forEach(r=>{const x=fill(r,prio,true);x?set(r,'ok',x.al):pend.push(r)});
+  // 2) candidatas de transferência por item: outras filiais com sobra; sem nenhuma → exato na prioritária; senão outras com exato
+  const T=[];
+  for(const r of pend){let c=others.filter(f=>fill(r,f,true));
+    if(c.length){T.push({r,c,strict:true});continue}
+    const x=fill(r,prio,false);if(x){set(r,'ok',x.al);continue}
+    c=others.filter(f=>fill(r,f,false));if(c.length)T.push({r,c,strict:false});else r.st='?'}
+  // 3) consolidar: menor número de filiais de origem (cobertura gulosa: quem atende mais itens; empate → menores lotes)
+  let open=[...T];
+  while(open.length){
+    const sc=others.map(f=>{const its=open.filter(t=>t.c.includes(f));
+      const sz=its.reduce((s,t)=>{const x=tryFill(t.r.pieces,by(t.r,f),t.strict);return s+x.al.reduce((a,b)=>a+b.l._rem,0)},0);return{f,n:its.length,sz}})
+      .filter(x=>x.n).sort((a,b)=>b.n-a.n||a.sz-b.sz);
+    if(!sc.length)break;const f=sc[0].f;
+    for(const t of open.filter(t=>t.c.includes(f))){const x=fill(t.r,f,t.strict);if(x){set(t.r,'tr',x.al,f);t.done=1}else t.c=t.c.filter(z=>z!==f)}
+    open=open.filter(t=>!t.done&&t.c.length);
+    open.forEach(t=>t.c=t.c.filter(z=>fill(t.r,z,t.strict)))}
+  T.filter(t=>!t.r.st).forEach(t=>t.r.st='?');
+  // 4) sem lote único que atenda: combina prioritária + outras (misto) ou parcial
+  for(const r of R.filter(r=>r.st==='?')){let x=tryFill(r.pieces,by(r,prio));let al=x.al,left=x.left;commit(al);
+    for(const f of others){if(!left.length)break;const y=tryFill(left,by(r,f));commit(y.al);al=al.concat(y.al);left=y.left}
+    r.al=al;r.left=left;r.st=left.length?(al.length?'pa':'no'):'mx'}
+  lastRes=R;render()}
+const ST={ok:['Atende na prioritária','s-ok'],tr:['Transferir','s-tr'],mx:['Misto (prioritária + transf.)','s-mx'],pa:['Parcial','s-no'],no:['Sem lote que atenda','s-no']};
+function render(){
+  const R=lastRes,o=order;const c=k=>R.filter(r=>r.st===k).length;const orig=[...new Set(R.flatMap(r=>r.al.map(a=>a.l.f)).filter(f=>f!==prio))].sort();
+  const mT=R.reduce((a,r)=>a+r.qty,0),mOk=R.reduce((a,r)=>a+r.al.filter(x=>x.l.f===prio).reduce((s,x)=>s+x.q,0),0),mAl=R.reduce((a,r)=>a+r.al.reduce((s,x)=>s+x.q,0),0);
+  const verdict=c('ok')===R.length?`Pedido atendido 100% pela filial ${fname(prio)}.`:(c('pa')+c('no'))?`${c('pa')+c('no')} de ${R.length} itens sem lote que cubra a quantidade.`:`Pedido atendido, com transferência em ${c('tr')+c('mx')} item(ns) de ${orig.length} filial(is): ${orig.map(fname).join(', ')}.`;
+  $('#out').innerHTML=`<div class="head"><h2>${esc(verdict)}</h2><p>${esc(o.tipo||'Pedido')} ${esc(o.num||'—')} · ${esc(o.em||'')} · ${esc(o.cli||o.file||'')}${o.fil?` · emitido pela filial ${esc(fname(o.fil))}`:''}${o.fil&&o.fil!==prio&&stock.some(x=>x.f===o.fil)?` <button id="useFil">Priorizar ${esc(o.fil)}</button>`:''}</p></div>
+  <div class="kpis"><div class="kpi"><b>${R.length}</b><span>itens no pedido</span></div>
+   <div class="kpi"><b class="s-ok">${c('ok')}</b><span>atende na ${esc(names[prio]||prio||'prioritária')}</span></div>
+   <div class="kpi"><b class="s-tr">${c('tr')+c('mx')}</b><span>precisam de transferência</span></div>
+   <div class="kpi"><b class="s-no">${c('pa')+c('no')}</b><span>sem lote suficiente</span></div>
+   <div class="kpi"><b>${mT?Math.round(mOk/mT*100):0}%</b><span>dos metros na prioritária (${fmt(mAl/(mT||1)*100)}% total)</span></div></div>
+  <div class="card"><div class="row" style="margin:0 0 10px"><button class="pri" id="cpTr">Copiar solicitação de transferência</button><button id="cpAll">Copiar resultado (Excel)</button></div>
+  ${stock.length?'':'<p class="hint s-no">Estoque vazio — importe o Excel para conferir.</p>'}
+  <table class="stack"><thead><tr><th>Item</th><th>Código</th><th class="n">Qtd</th><th>Status</th><th>Separar de</th></tr></thead><tbody>${R.map(r=>`<tr>
+   <td>${esc(r.item)}</td><td><b>${esc(r.cod)}</b><div class="res-desc">${esc(r.desc)}</div>${r.obs?`<div class="res-desc">${esc(r.obs)}</div>`:''}</td>
+   <td class="n">${fmt(r.qty)} ${esc(r.um)}${r.pieces.length>1?`<div class="res-desc">${r.pieces.length} lances: ${r.pieces.map(fmt).join(' + ')}</div>`:''}</td>
+   <td><span class="chip ${ST[r.st][1]}">${ST[r.st][0]}</span>${r.st==='tr'?`<div class="res-desc">origem: ${esc(fname(r.via))}</div>`:''}${r.left.length?`<div class="res-desc s-no">faltam lances: ${r.left.map(fmt).join(' + ')}</div>`:''}</td>
+   <td><ul class="alloc">${r.al.map(a=>`<li>${esc(fname(a.l.f))} · lote <span class="lote">${esc(a.l.lote)}</span> · <span class="end">${esc(a.l.end||'s/ end.')}</span> · ${fmt(a.q)} de ${fmt(a.l.disp)}${Math.abs(a.l.disp-a.q)<1e-9?'<span class="tag">lote exato</span>':''}</li>`).join('')||'<li class="res-desc">—</li>'}</ul>
+    ${(r.st==='no'||r.st==='pa')?`<div class="res-desc">${r.big?`maior lote: ${fmt(r.big.disp)} m · ${esc(fname(r.big.f))} · lote ${esc(r.big.lote)}`:'código sem saldo em nenhuma filial'}</div>`:''}
+    </td></tr>`).join('')}</tbody></table>
+  <p class="hint">Regra: cada lance sai inteiro de um único lote com saldo disponível ≥ quantidade. Um resultado por item, sempre o menor lote que cobre: 1º filial prioritária com sobra · 2º demais filiais com sobra · 3º lote exato (prioritária, depois demais) — só quando nenhuma filial tem lote maior. Transferências concentradas no menor número possível de filiais de origem. Lotes já usados por um item ficam reservados para os seguintes do mesmo pedido.</p></div>`;
+  $('#cpTr').onclick=()=>{const L=[];R.forEach(r=>r.al.filter(a=>a.l.f!==prio).forEach(a=>L.push(`${a.l.cod} | ${r.descE||r.desc} | Lote ${a.l.lote} | End. ${a.l.end} | ${fmt(a.q)} ${r.um} | Origem ${fname(a.l.f)}`)));
+    copy(L.length?`Solicitação de transferência — Pedido ${o.num} (${o.cli})\nDestino: ${fname(prio)}\n\n${L.join('\n')}`:'',L.length?'Solicitação copiada':'Nenhuma transferência neste pedido')};
+  $('#cpAll').onclick=()=>{const H='Item\tCódigo\tDescrição\tQtd\tUM\tStatus\tFilial\tLote\tEndereço\tQtd lote\tDisponível lote';const L=[H];
+    R.forEach(r=>{if(!r.al.length)L.push([r.item,r.cod,r.desc,fmt(r.qty),r.um,ST[r.st][0],'','','','',''].join('\t'));r.al.forEach(a=>L.push([r.item,r.cod,r.desc,fmt(r.qty),r.um,ST[r.st][0],fname(a.l.f),a.l.lote,a.l.end,fmt(a.q),fmt(a.l.disp)].join('\t')))});
+    copy(L.join('\n'),'Resultado copiado — cole no Excel')}}
+document.addEventListener('click',e=>{if(e.target.id==='useFil'&&order){prio=order.fil;LS.set('cp_prio',prio);renderStock();run()}});
+async function copy(t,msg){if(!t){toast(msg);return}try{await navigator.clipboard.writeText(t);toast(msg)}catch(e){toast('Não foi possível copiar neste navegador')}}
+
+/* ---------- EVENTOS ---------- */
+function drop(id,inp,fn){const d=$(id);['dragover','dragenter'].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.add('over')}));
+  ['dragleave','drop'].forEach(e=>d.addEventListener(e,ev=>{ev.preventDefault();d.classList.remove('over')}));
+  d.addEventListener('drop',ev=>fn([...ev.dataTransfer.files]));$(inp).onchange=e=>{fn([...e.target.files]);e.target.value=''}}
+drop('#dropX','#fileX',readExcel);drop('#dropP','#fileP',f=>f[0]&&readPdf(f[0]));
+$('#btnPaste').onclick=()=>{try{const rows=$('#pasteX').value.split(/\r?\n/).filter(l=>l.trim()).map(l=>l.split('\t'));mergeStock(rowsToStock(rows));$('#pasteX').value=''}catch(e){toast('Erro: '+e.message)}};
+$('#btnManual').onclick=()=>{const items=$('#manual').value.split(/\r?\n/).map((l,i)=>{const p=l.split(/[;\t]/);if(p.length<2)return null;const qty=num(p[1]);return{item:String(i+1).padStart(2,'0'),cod:p[0].trim().toUpperCase(),desc:'',um:'MT',qty,pieces:null}}).filter(x=>x&&x.cod&&x.qty>0);
+  if(!items.length){toast('Use o formato CÓDIGO ; QUANTIDADE');return}order={num:'manual',em:'',cli:'Itens digitados',items};run()};
+$('#prio').onchange=e=>{prio=e.target.value;LS.set('cp_prio',prio);if(order)run()};
+renderStock();
+}
+</script></body></html>
