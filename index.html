@@ -23,6 +23,11 @@ button,select,input,textarea{font:inherit}
 .brand small{display:block;font-weight:400;font-size:12px;color:#9aa3ab}
 .tf{display:flex;align-items:center;gap:8px;font-size:13px;color:#b5bdc4}
 .tf select{background:#232a30;color:#fff;border:1px solid #39424a;border-radius:6px;padding:6px 10px;min-height:38px;font-weight:600;font-size:15px}
+.tog{display:inline-flex;align-items:center;gap:8px;background:#232a30;border:1px solid #39424a;color:#c8cfd5;border-radius:6px;min-height:38px;padding:0 12px;font-size:13px;cursor:pointer}
+.tog .sw{width:30px;height:16px;border-radius:99px;background:#4a535b;position:relative;transition:background .15s}.tog .sw::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff;transition:left .15s}
+.tog[aria-pressed=true]{border-color:var(--acc);color:#fff}.tog[aria-pressed=true] .sw{background:var(--acc)}.tog[aria-pressed=true] .sw::after{left:16px}
+.tog:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){.tog .sw,.tog .sw::after{transition:none}}
 .pill{font-size:12px;padding:4px 10px;border-radius:99px;background:#232a30;color:#c8cfd5;white-space:nowrap}
 .icon{background:#232a30;border:1px solid #39424a;color:#fff;border-radius:6px;width:40px;height:38px;display:grid;place-items:center;cursor:pointer}
 .icon svg{width:18px;height:18px}
@@ -80,6 +85,7 @@ table.g{width:100%;min-width:980px;border-collapse:collapse;font-size:13.5px;tab
 <header class="top">
   <div class="brand"><i>CE</i><div>Consulta Estoque<small>Conferência de pedido × estoque das filiais</small></div></div>
   <label class="tf" for="prio">Filial prioritária <select id="prio"></select></label>
+  <button class="tog" id="only" aria-pressed="false" title="Consultar apenas na filial selecionada, sem transferência"><span class="sw"></span>Somente esta filial</button>
   <span class="pill" id="basePill">Base: vazia</span>
   <button class="icon" id="theme" aria-label="Alternar tema claro/escuro" title="Tema claro/escuro"></button>
 </header>
@@ -113,7 +119,7 @@ const DEF_NAMES={'0101':'Jandira','0109':'Sorocaba','0114':'Lapa','0116':'Praia 
 const FAM_GROUPS=[['E18','E24'],['B06','B07'],['E21','E29']];
 let stock=LS.get('cp_stock',[]),meta=LS.get('cp_meta',{}),names={...DEF_NAMES},prio=LS.get('cp_prio','0114');
 Object.entries(LS.get('cp_names',{})).forEach(([k,v])=>{if(v)names[k]=v});
-let order=null,lastRes=[];
+let order=null,lastRes=[],only=LS.get('cp_only',false);
 const fmt=n=>(Math.round(n*100)/100).toLocaleString('pt-BR',{maximumFractionDigits:2});
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fname=f=>names[f]?`${f} ${names[f]}`:f;
@@ -212,7 +218,7 @@ function similars(cod){const m=cod.match(RXF);if(!m)return[];const g=FAM_GROUPS.
   return g.filter(f=>f!==m[1]).map(f=>f+m[2]+m[3]+m[4])}
 const atox=d=>/ATOX/i.test(d||'');
 function run(){
-  if(!order)return;const fs=[...new Set(stock.map(r=>r.f))].sort();const others=fs.filter(f=>f!==prio);
+  if(!order)return;const fs=[...new Set(stock.map(r=>r.f))].sort();const others=only?[]:fs.filter(f=>f!==prio); // modo "somente esta filial": sem transferência
   stock.forEach(r=>r._rem=r.disp);
   const lotsOf=c=>stock.filter(r=>r.cod===c&&r.disp>0);
   const R=order.items.map(it=>{const lots=lotsOf(it.cod);
@@ -269,6 +275,7 @@ function run(){
 
 /* ---------- TELA ---------- */
 const ST={ok:['Atende na prioritária','s-ok'],tr:['Transferir','s-tr'],mx:['Misto','s-mx'],pa:['Parcial','s-pa'],no:['Sem lote','s-no']};
+const stLbl=k=>only&&k==='ok'?['Atende na filial','s-ok']:only&&k==='no'?['Não atende na filial','s-no']:ST[k];
 // agrupa lances do mesmo lote: 150 × 100 m vira uma linha
 const grp=al=>{const m=new Map();al.forEach(a=>{const g=m.get(a.l)||{l:a.l,q:0,n:0,sz:new Set()};g.q+=a.q;g.n++;g.sz.add(a.q);m.set(a.l,g)});return[...m.values()]};
 const cut=g=>`${fmt(g.q)} de ${fmt(g.l.disp)} m`+(g.n>1?` <span class="sub">(${g.n} lances)</span>`:'');
@@ -281,7 +288,7 @@ function render(){
   $('#out').innerHTML=`
   <section class="doc"><h1>${esc(o.tipo||'Documento')} ${esc(o.num||'')}</h1>
     <div class="kv">Cliente<b>${esc(o.cli||'—')}</b></div><div class="kv">Emissão<b>${esc(o.em||'—')}</b></div>
-    <div class="kv">Filial emissora<b>${esc(o.fil?fname(o.fil):'—')}</b></div><div class="kv">Prioritária<b>${esc(fname(prio))}</b></div>
+    <div class="kv">Filial emissora<b>${esc(o.fil?fname(o.fil):'—')}</b></div><div class="kv">${only?'Consulta':'Prioritária'}<b>${esc(fname(prio))}${only?' · somente esta filial':''}</b></div>
     ${o.fil&&o.fil!==prio&&stock.some(x=>x.f===o.fil)?`<button class="btn sm" id="useFil">Priorizar ${esc(fname(o.fil))}</button>`:''}</section>
   <section class="kpis">
     <div class="kpi"><b>${R.length}</b><span>itens</span></div>
@@ -297,8 +304,8 @@ function render(){
     <td data-l="Item">${esc(r.item)}</td>
     <td data-l="Código"><span class="cod">${esc(r.cod)}</span><div class="sub">${esc(r.desc||r.descE)}</div>${r.obs?`<div class="sub">${esc(r.obs)}</div>`:''}</td>
     <td class="n" data-l="Qtd">${fmt(r.qty)} ${esc(r.um)}${r.pieces.length>1?`<div class="sub">${r.pieces.length} ${r.roll?'rolos':'lances'}</div>`:''}</td>
-    <td data-l="Status"><span class="st ${ST[r.st][1]}">${ST[r.st][0]}</span>${r.st==='tr'?`<div class="sub">de ${esc(fname(r.via))}</div>`:''}${r.left.length?`<div class="sub wrn">faltam ${fmt(r.left.reduce((a,b)=>a+b,0))} m${r.left.length>1?` (${r.left.length} lances)`:''}</div>`:''}</td>
-    <td data-l="Atendimento">${r.al.length?alloc(r.al,r.roll):`<span class="sub">${r.big?`Maior lote: ${fmt(r.big.disp)} m em ${esc(fname(r.big.f))}`:'Código sem saldo em nenhuma filial'}</span>`}</td>
+    <td data-l="Status"><span class="st ${stLbl(r.st)[1]}">${stLbl(r.st)[0]}</span>${r.st==='tr'?`<div class="sub">de ${esc(fname(r.via))}</div>`:''}${r.left.length?`<div class="sub wrn">faltam ${fmt(r.left.reduce((a,b)=>a+b,0))} m${r.left.length>1?` (${r.left.length} lances)`:''}</div>`:''}</td>
+    <td data-l="Atendimento">${r.al.length?alloc(r.al,r.roll):`<span class="sub">${r.big?`Maior lote: ${fmt(r.big.disp)} m em ${esc(fname(r.big.f))}${only&&r.big.f!==prio?' (fora da consulta)':''}`:'Código sem saldo em nenhuma filial'}</span>`}</td>
     <td data-l="Alertas">${r.urg?urgBox(r.urg,r.st!=='ok'):''}
       ${r.sim?`<div class="box sim"><span class="t">SIMILAR · ${esc(r.sim.cod)}</span>${esc(r.sim.desc)}${r.sim.down?'<br><b class="wrn">Atenção: pedido é ATOX e o similar não é — confirmar com o cliente.</b>':''}
         <div style="margin-top:6px"><span class="st ${ST[r.sim.st][1]}">${r.sim.st==='ok'?'Atende na prioritária':'Transferir de '+esc(fname(r.sim.via))}</span></div><div style="margin-top:6px">${alloc(r.sim.al,r.roll)}</div></div>
@@ -322,6 +329,8 @@ drop('#dropX','#fileX',readExcel);drop('#dropP','#fileP',f=>f[0]&&readPdf(f[0]))
 $('#btnPaste').onclick=()=>{try{setStock(rowsToStock($('#pasteX').value.split(/\r?\n/).filter(l=>l.trim()).map(l=>l.split('\t'))));$('#pasteX').value=''}catch(e){toast('Erro: '+e.message)}};
 $('#btnManual').onclick=()=>{const items=$('#manual').value.split(/\r?\n/).map((l,i)=>{const p=l.split(/[;\t]/);if(p.length<2)return null;return{item:String(i+1).padStart(2,'0'),cod:p[0].trim().toUpperCase(),desc:'',um:'MT',qty:num(p[1]),pieces:null}}).filter(x=>x&&x.cod&&x.qty>0);
   if(!items.length){toast('Use o formato CÓDIGO ; QUANTIDADE');return}order={tipo:'Itens digitados',num:'',em:'',cli:'',fil:'',items};run()};
+const setOnly=v=>{only=v;LS.set('cp_only',v);$('#only').setAttribute('aria-pressed',v);if(order)run()};
+$('#only').setAttribute('aria-pressed',only);$('#only').onclick=()=>setOnly(!only);
 $('#prio').onchange=e=>{prio=e.target.value;LS.set('cp_prio',prio);if(order)run()};
 renderStock();
 }
