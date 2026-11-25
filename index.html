@@ -52,7 +52,8 @@ details summary{cursor:pointer;font-size:13px;color:var(--mute);padding:6px 0}
 .gbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--panel2)}
 .gbar strong{font-size:14px}
 .scroll{overflow-x:auto}
-table.g{width:100%;border-collapse:collapse;font-size:13.5px}
+table.g{width:100%;min-width:980px;border-collapse:collapse;font-size:13.5px;table-layout:fixed}
+.g td{overflow-wrap:anywhere}.sep{height:1px;background:var(--line);margin:6px 0}.al span{min-width:0}
 .g th{text-align:left;font-size:12px;font-weight:600;color:var(--mute);padding:8px 10px;border-bottom:1px solid var(--line);background:var(--panel2);white-space:nowrap}
 .g td{padding:10px;border-bottom:1px solid var(--line);vertical-align:top}
 .g tbody tr:hover{background:var(--panel2)}
@@ -74,7 +75,7 @@ table.g{width:100%;border-collapse:collapse;font-size:13.5px}
 .empty{padding:48px 20px;text-align:center;color:var(--mute)}
 .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 16px;border-radius:6px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}.toast.on{opacity:1}
 @media(prefers-reduced-motion:reduce){.toast{transition:none}}
-@media(max-width:700px){.g thead{display:none}.g tr{display:grid;padding:8px 0}.g td{border:0;padding:4px 12px}.g td[data-l]::before{content:attr(data-l);display:block;font-size:11px;color:var(--mute)}.n{text-align:left}}
+@media(max-width:700px){table.g{min-width:0;table-layout:auto}.g colgroup{display:none}.g thead{display:none}.g tr{display:grid;padding:8px 0}.g td{border:0;padding:4px 12px}.g td[data-l]::before{content:attr(data-l);display:block;font-size:11px;color:var(--mute)}.n{text-align:left}}
 </style></head><body>
 <header class="top">
   <div class="brand"><i>CE</i><div>Consulta Estoque<small>Conferência de pedido × estoque das filiais</small></div></div>
@@ -266,8 +267,11 @@ function run(){
 
 /* ---------- TELA ---------- */
 const ST={ok:['Atende na prioritária','s-ok'],tr:['Transferir','s-tr'],mx:['Misto','s-mx'],pa:['Parcial','s-pa'],no:['Sem lote','s-no']};
-const alloc=al=>al.map(a=>`<div class="al"><span class="k">Filial</span><span><b>${esc(fname(a.l.f))}</b></span><span class="k">Lote</span><span><b>${esc(a.l.lote)}</b></span><span class="k">Endereço</span><span><span class="end">${esc(a.l.end||'sem endereço')}</span></span><span class="k">Corte</span><span>${fmt(a.q)} de ${fmt(a.l.disp)} m${isExact(a)?' <b class="wrn">· lote exato</b>':''}</span></div>`).join('<div style="height:6px"></div>');
-const urgBox=(u,hasTr)=>`<div class="box urg"><span class="t">REPASSE URGENTE — lote exato na prioritária</span>${u.map(a=>`${esc(fname(a.l.f))} · lote <b>${esc(a.l.lote)}</b> · <span class="end">${esc(a.l.end||'sem endereço')}</span> · ${fmt(a.l.disp)} m`).join('<br>')}<br>${hasTr?'Verificar o lote físico antes de liberar. Opção de transferência indicada ao lado.':'Sem opção de transferência — só atende com este lote.'}</div>`;
+// agrupa lances do mesmo lote: 150 × 100 m vira uma linha
+const grp=al=>{const m=new Map();al.forEach(a=>{const g=m.get(a.l)||{l:a.l,q:0,n:0,sz:new Set()};g.q+=a.q;g.n++;g.sz.add(a.q);m.set(a.l,g)});return[...m.values()]};
+const cut=g=>(g.n>1?(g.sz.size===1?`${g.n} × ${fmt([...g.sz][0])} m = `:`${g.n} lances = `):'')+`${fmt(g.q)} de ${fmt(g.l.disp)} m`;
+const alloc=al=>grp(al).map(g=>`<div class="al"><span class="k">Filial</span><span><b>${esc(fname(g.l.f))}</b></span><span class="k">Lote</span><span><b>${esc(g.l.lote)}</b></span><span class="k">Endereço</span><span><span class="end">${esc(g.l.end||'sem endereço')}</span></span><span class="k">Corte</span><span>${cut(g)}${Math.abs(g.l.disp-g.q)<1e-9?' <b class="wrn">· lote exato</b>':''}</span></div>`).join('<div class="sep"></div>');
+const urgBox=(u,hasTr)=>`<div class="box urg"><span class="t">REPASSE URGENTE — lote exato na prioritária</span>${grp(u).map(g=>`${esc(fname(g.l.f))} · lote <b>${esc(g.l.lote)}</b> · <span class="end">${esc(g.l.end||'sem endereço')}</span> · ${fmt(g.l.disp)} m`).join('<br>')}<br>${hasTr?'Verificar o lote físico antes de liberar. Opção de transferência indicada ao lado.':'Sem opção de transferência — só atende com este lote.'}</div>`;
 function render(){
   const R=lastRes,o=order;const c=k=>R.filter(r=>r.st===k).length;
   const orig=[...new Set(R.flatMap(r=>r.al.map(a=>a.l.f)).filter(f=>f!==prio))].sort();
@@ -286,7 +290,7 @@ function render(){
     <div class="kpi k-bad"><b>${nFalta}</b><span>sem lote que atenda</span></div></section>
   <section class="grid"><div class="gbar"><strong>Atendimento por item</strong><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm pri" id="cpTr">Copiar solicitação de transferência</button><button class="btn sm" id="cpAll">Copiar resultado (Excel)</button></div></div>
   ${stock.length?'':'<p class="empty">Estoque vazio — importe o Excel da intranet.</p>'}
-  <div class="scroll"><table class="g"><thead><tr><th>Item</th><th>Código</th><th class="n">Qtd</th><th>Status</th><th>Atendimento</th><th>Alertas e alternativa</th></tr></thead><tbody>
+  <div class="scroll"><table class="g"><colgroup><col style="width:52px"><col style="width:22%"><col style="width:110px"><col style="width:150px"><col style="width:27%"><col></colgroup><thead><tr><th>Item</th><th>Código</th><th class="n">Qtd</th><th>Status</th><th>Atendimento</th><th>Alertas e alternativa</th></tr></thead><tbody>
   ${R.map(r=>`<tr>
     <td data-l="Item">${esc(r.item)}</td>
     <td data-l="Código"><span class="cod">${esc(r.cod)}</span><div class="sub">${esc(r.desc||r.descE)}</div>${r.obs?`<div class="sub">${esc(r.obs)}</div>`:''}</td>
@@ -300,11 +304,11 @@ function render(){
       ${!r.urg&&!r.sim?'<span class="sub">—</span>':''}</td></tr>`).join('')}
   </tbody></table></div></section>`;
   const u=$('#useFil');if(u)u.onclick=()=>{prio=o.fil;LS.set('cp_prio',prio);renderStock();run()};
-  $('#cpTr').onclick=()=>{const L=[];R.forEach(r=>r.al.filter(a=>a.l.f!==prio).forEach(a=>L.push(`${a.l.cod} | ${r.descE||r.desc} | Lote ${a.l.lote} | End. ${a.l.end||'-'} | ${fmt(a.q)} ${r.um} | Origem ${fname(a.l.f)}`)));
+  $('#cpTr').onclick=()=>{const L=[];R.forEach(r=>grp(r.al.filter(a=>a.l.f!==prio)).forEach(g=>L.push(`${g.l.cod} | ${r.descE||r.desc} | Lote ${g.l.lote} | End. ${g.l.end||'-'} | ${g.n>1?g.n+' lances = ':''}${fmt(g.q)} ${r.um} | Origem ${fname(g.l.f)}`)));
     copy(L.length?`Solicitação de transferência — ${o.tipo} ${o.num} (${o.cli})\nDestino: ${fname(prio)}\n\n${L.join('\n')}`:'',L.length?'Solicitação copiada':'Nenhuma transferência neste documento')};
   $('#cpAll').onclick=()=>{const L=['Item\tCódigo\tDescrição\tQtd\tUM\tStatus\tFilial\tLote\tEndereço\tCorte\tDisponível\tRepasse urgente\tSimilar\tSimilar filial/lote'];
-    R.forEach(r=>{const u=r.urg?r.urg.map(a=>`${a.l.f} lote ${a.l.lote}`).join(' / '):'';const s=r.sim?r.sim.cod:'';const sl=r.sim?r.sim.al.map(a=>`${fname(a.l.f)} lote ${a.l.lote} (${fmt(a.q)} de ${fmt(a.l.disp)})`).join(' / '):'';
-      const rows=r.al.length?r.al:[null];rows.forEach(a=>L.push([r.item,r.cod,r.desc,fmt(r.qty),r.um,ST[r.st][0],a?fname(a.l.f):'',a?a.l.lote:'',a?a.l.end:'',a?fmt(a.q):'',a?fmt(a.l.disp):'',u,s,sl].join('\t')))});
+    R.forEach(r=>{const u=r.urg?r.urg.map(a=>`${a.l.f} lote ${a.l.lote}`).join(' / '):'';const s=r.sim?r.sim.cod:'';const sl=r.sim?grp(r.sim.al).map(g=>`${fname(g.l.f)} lote ${g.l.lote} (${fmt(g.q)} de ${fmt(g.l.disp)})`).join(' / '):'';
+      const rows=r.al.length?grp(r.al):[null];rows.forEach(a=>L.push([r.item,r.cod,r.desc,fmt(r.qty),r.um,ST[r.st][0],a?fname(a.l.f):'',a?a.l.lote:'',a?a.l.end:'',a?fmt(a.q):'',a?fmt(a.l.disp):'',u,s,sl].join('\t')))});
     copy(L.join('\n'),'Resultado copiado — cole no Excel')}}
 async function copy(t,msg){if(!t){toast(msg);return}try{await navigator.clipboard.writeText(t);toast(msg)}catch(e){toast('Não foi possível copiar neste navegador')}}
 
