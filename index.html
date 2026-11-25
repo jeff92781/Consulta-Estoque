@@ -168,22 +168,24 @@ pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/p
 function linesFromItems(items){const rows=[];
   for(const it of items){if(!it.str||!it.str.trim())continue;const y=it.transform[5],x=it.transform[4];let r=rows.find(r=>Math.abs(r.y-y)<3);if(!r){r={y,cells:[]};rows.push(r)}r.cells.push({x,s:it.str})}
   rows.sort((a,b)=>b.y-a.y);return rows.map(r=>r.cells.sort((a,b)=>a.x-b.x).map(c=>c.s).join(' ').replace(/\s+/g,' ').trim())}
-const Q='(\\d{1,3}(?:\\.\\d{3})*(?:,\\d+)?|\\d+)',NCM='(\\d{4}\\.?\\d{2}\\.?\\d{2})',COD='([A-Z0-9][A-Z0-9.\\-]{4,19})';
+const Q='(\\d{1,3}(?:\\.\\d{3})+(?:,\\d+)?|\\d+(?:,\\d+)?)',NCM='(\\d{4}\\.?\\d{2}\\.?\\d{2})',COD='([A-Z0-9][A-Z0-9.\\-]{4,19})';
 const RXA=new RegExp(`(?:^|\\s)(\\d{1,3})\\s+${COD}\\s+(.+?)\\s+${NCM}\\s+([A-Z]{2,3})\\s+${Q}\\s`);
 const RXB=new RegExp(`^(\\d{1,3})\\s+${COD}\\s+(.+?)\\s+${NCM}\\s+${Q}\\s+([A-Z]{2,3})\\b`);
 const RXC=new RegExp(`^(\\d{1,3})\\s+${COD}\\s+-\\s+(.+?)\\s+(\\d+)\\s+([A-Z]{1,3})\\s+${Q}\\s+${Q}\\s+\\d{2}\\/\\d{2}\\/\\d{4}(.*)$`);
 function lances(desc,qty){const m=desc.match(/LANCE\s*\(([^)]*)\)/i);if(!m)return null;const p=[];
   for(const g of m[1].matchAll(/(\d+)\s*x\s*[A-Z]*\s*(\d+(?:[.,]\d+)?)/gi)){const n=+g[1],c=num(g[2]);for(let i=0;i<n;i++)p.push(c)}
   const tot=p.reduce((a,b)=>a+b,0);return p.length&&Math.abs(tot-qty)<0.01?p:null}
+// lance em rolo fechado (ex.: LANCE(150 X RL100)): sobra/lote exato não se aplicam
+const isRoll=d=>/LANCE\s*\(\s*\d+\s*X\s*R/i.test(d||'');
 function parseOrder(L){
   const items=[];let tipo='';
   for(let i=0;i<L.length;i++){const l=L[i];let m;
     if(m=l.match(RXC)){const n=+m[4],tam=num(m[6]);let desc=m[3];const nx=L[i+1]||'';
       if(nx&&!RXC.test(nx)&&!/^\d+(\s+TOTAL.*)?$/i.test(nx)&&!/^\d{4}\s+\d{6}/.test(nx))desc+=' '+nx;
       const sit=(m[8].match(/(Faturado|Liberado|Bloqueado|Aberto|Pendente|Parcial)\w*/i)||[''])[0];
-      items.push({item:m[1],cod:m[2].toUpperCase(),desc,um:'MT',qty:n*tam,pieces:Array(n).fill(tam),obs:[`lance ${n}×${fmt(tam)}`,num(m[7])?`saldo ${fmt(num(m[7]))}`:'',sit].filter(Boolean).join(' · ')});tipo='Consulta de pedido de venda';continue}
-    if(m=l.match(RXB)){const qty=num(m[5]);items.push({item:m[1],cod:m[2].toUpperCase(),desc:m[3],um:m[6],qty,pieces:lances(m[3],qty)});tipo=tipo||'Orçamento';continue}
-    if(m=l.match(RXA)){const qty=num(m[6]);items.push({item:m[1],cod:m[2].toUpperCase(),desc:m[3],um:m[5],qty,pieces:lances(m[3],qty)});tipo=tipo||'Pedido interno'}}
+      items.push({item:m[1],cod:m[2].toUpperCase(),desc,um:'MT',qty:n*tam,pieces:Array(n).fill(tam),roll:/^R/.test(m[5]),obs:[`lance ${n}×${fmt(tam)}`,num(m[7])?`saldo ${fmt(num(m[7]))}`:'',sit].filter(Boolean).join(' · ')});tipo='Consulta de pedido de venda';continue}
+    if(m=l.match(RXB)){const qty=num(m[5]);items.push({item:m[1],cod:m[2].toUpperCase(),desc:m[3],um:m[6],qty,pieces:lances(m[3],qty),roll:isRoll(m[3])});tipo=tipo||'Orçamento';continue}
+    if(m=l.match(RXA)){const qty=num(m[6]);items.push({item:m[1],cod:m[2].toUpperCase(),desc:m[3],um:m[5],qty,pieces:lances(m[3],qty),roll:isRoll(m[3])});tipo=tipo||'Pedido interno'}}
   const g=re=>{for(const l of L){const m=l.match(re);if(m)return m[1].trim()}return''};
   const hc=L.map(l=>l.match(/^(\d{4})\s+(\d{6})\s+(.+?)\s+(\d{2}\/\d{2}\/\d{4})/)).find(Boolean);
   const fi=L.findIndex(l=>/\bFILIAL$/.test(l));
@@ -216,12 +218,12 @@ function run(){
   const R=order.items.map(it=>{const lots=lotsOf(it.cod);
     return{...it,pieces:it.pieces||[it.qty],lots,st:'',al:[],left:[],via:'',descE:lots[0]?.desc||'',big:[...lots].sort((a,b)=>b.disp-a.disp)[0]}});
   const by=(lots,f)=>lots.filter(l=>l.f===f&&l._rem>0);
-  const fill=(r,f,strict)=>{const x=tryFill(r.pieces,by(r.lots,f),strict);return x.left.length?null:x};
+  const fill=(r,f,strict)=>{const x=tryFill(r.pieces,by(r.lots,f),strict&&!r.roll);return x.left.length?null:x};
   const set=(r,st,al,via)=>{r.st=st;r.al=al;r.via=via||'';commit(al)};
   // 1) prioritária com sobra
   const pend=[];R.forEach(r=>{const x=fill(r,prio,true);x?set(r,'ok',x.al):pend.push(r)});
   // lote exato na prioritária → alerta de repasse urgente (avaliado antes das transferências)
-  pend.forEach(r=>{const x=fill(r,prio,false);if(x)r.urg=x.al});
+  pend.forEach(r=>{if(r.roll)return;const x=fill(r,prio,false);if(x)r.urg=x.al});
   // 2) candidatas: outras com sobra → senão exato na prioritária → senão outras com exato
   const T=[];
   for(const r of pend){let c=others.filter(f=>fill(r,f,true));
@@ -232,7 +234,7 @@ function run(){
   let open=[...T];
   while(open.length){
     const sc=others.map(f=>{const its=open.filter(t=>t.c.includes(f));
-      const sz=its.reduce((s,t)=>s+tryFill(t.r.pieces,by(t.r.lots,f),t.strict).al.reduce((a,b)=>a+b.l._rem,0),0);return{f,n:its.length,sz}})
+      const sz=its.reduce((s,t)=>s+tryFill(t.r.pieces,by(t.r.lots,f),t.strict&&!t.r.roll).al.reduce((a,b)=>a+b.l._rem,0),0);return{f,n:its.length,sz}})
       .filter(x=>x.n).sort((a,b)=>b.n-a.n||a.sz-b.sz);
     if(!sc.length)break;const f=sc[0].f;
     for(const t of open.filter(t=>t.c.includes(f))){const x=fill(t.r,f,t.strict);if(x){set(t.r,'tr',x.al,f);t.done=1}else t.c=t.c.filter(z=>z!==f)}
@@ -243,13 +245,13 @@ function run(){
     for(const f of others){if(!left.length)break;const y=tryFill(left,by(r.lots,f));commit(y.al);al=al.concat(y.al);left=y.left}
     r.al=al;r.left=left;r.st=left.length?(al.length?'pa':'no'):'mx'}
   // alerta também quando o atendimento escolhido usa lote exato na prioritária
-  R.forEach(r=>{const ex=r.al.filter(a=>a.l.f===prio&&isExact(a));if(ex.length)r.urg=ex});
+  R.forEach(r=>{if(r.roll)return;const ex=r.al.filter(a=>a.l.f===prio&&isExact(a));if(ex.length)r.urg=ex});
   // 5) similar de outra família: só quando o item não sai da prioritária com sobra
   const orig=new Set(R.flatMap(r=>r.al.map(a=>a.l.f)).filter(f=>f!==prio));
   R.forEach(r=>{if(r.st==='ok'&&!r.urg)return;
     let best=null;
     for(const sc of similars(r.cod)){const lots=lotsOf(sc);if(!lots.length)continue;const s={cod:sc,lots,pieces:r.pieces,desc:lots[0].desc};
-      const f1=(f,st)=>{const x=tryFill(s.pieces,by(lots,f),st);return x.left.length?null:x.al};
+      const f1=(f,st)=>{const x=tryFill(s.pieces,by(lots,f),st&&!r.roll);return x.left.length?null:x.al};
       let al,kind,via='';
       if(al=f1(prio,true))kind='ok';
       else{const oth=[...others].sort((a,b)=>(orig.has(a)?0:1)-(orig.has(b)?0:1));
@@ -257,8 +259,8 @@ function run(){
         if(!al&&(al=f1(prio,false)))kind='ok';
         if(!al)for(const f of oth){if(al=f1(f,false)){kind='tr';via=f;break}}}
       if(!al)continue;
-      s.al=al;s.st=kind;s.via=via;s.urgP=f1(prio,false)&&kind!=='ok'?f1(prio,false):null;
-      if(kind==='ok'&&al.some(isExact))s.urgP=al;
+      s.al=al;s.st=kind;s.via=via;s.urgP=!r.roll&&kind!=='ok'&&f1(prio,false)?f1(prio,false):null;
+      if(!r.roll&&kind==='ok'&&al.some(isExact))s.urgP=al;
       s.down=atox(r.descE||r.desc)&&!atox(s.desc);
       const rank=x=>(x.st==='ok'?0:1)+(x.urgP?0.5:0);
       if(!best||rank(s)<rank(best))best=s}
@@ -269,8 +271,8 @@ function run(){
 const ST={ok:['Atende na prioritária','s-ok'],tr:['Transferir','s-tr'],mx:['Misto','s-mx'],pa:['Parcial','s-pa'],no:['Sem lote','s-no']};
 // agrupa lances do mesmo lote: 150 × 100 m vira uma linha
 const grp=al=>{const m=new Map();al.forEach(a=>{const g=m.get(a.l)||{l:a.l,q:0,n:0,sz:new Set()};g.q+=a.q;g.n++;g.sz.add(a.q);m.set(a.l,g)});return[...m.values()]};
-const cut=g=>(g.n>1?(g.sz.size===1?`${g.n} × ${fmt([...g.sz][0])} m = `:`${g.n} lances = `):'')+`${fmt(g.q)} de ${fmt(g.l.disp)} m`;
-const alloc=al=>grp(al).map(g=>`<div class="al"><span class="k">Filial</span><span><b>${esc(fname(g.l.f))}</b></span><span class="k">Lote</span><span><b>${esc(g.l.lote)}</b></span><span class="k">Endereço</span><span><span class="end">${esc(g.l.end||'sem endereço')}</span></span><span class="k">Corte</span><span>${cut(g)}${Math.abs(g.l.disp-g.q)<1e-9?' <b class="wrn">· lote exato</b>':''}</span></div>`).join('<div class="sep"></div>');
+const cut=g=>`${fmt(g.q)} de ${fmt(g.l.disp)} m`+(g.n>1?` <span class="sub">(${g.n} lances)</span>`:'');
+const alloc=(al,noEx)=>grp(al).map(g=>`<div class="al"><span class="k">Filial</span><span><b>${esc(fname(g.l.f))}</b></span><span class="k">Lote</span><span><b>${esc(g.l.lote)}</b></span><span class="k">Endereço</span><span><span class="end">${esc(g.l.end||'sem endereço')}</span></span><span class="k">Corte</span><span>${cut(g)}${!noEx&&Math.abs(g.l.disp-g.q)<1e-9?' <b class="wrn">· lote exato</b>':''}</span></div>`).join('<div class="sep"></div>');
 const urgBox=(u,hasTr)=>`<div class="box urg"><span class="t">REPASSE URGENTE — lote exato na prioritária</span>${grp(u).map(g=>`${esc(fname(g.l.f))} · lote <b>${esc(g.l.lote)}</b> · <span class="end">${esc(g.l.end||'sem endereço')}</span> · ${fmt(g.l.disp)} m`).join('<br>')}<br>${hasTr?'Verificar o lote físico antes de liberar. Opção de transferência indicada ao lado.':'Sem opção de transferência — só atende com este lote.'}</div>`;
 function render(){
   const R=lastRes,o=order;const c=k=>R.filter(r=>r.st===k).length;
@@ -294,12 +296,12 @@ function render(){
   ${R.map(r=>`<tr>
     <td data-l="Item">${esc(r.item)}</td>
     <td data-l="Código"><span class="cod">${esc(r.cod)}</span><div class="sub">${esc(r.desc||r.descE)}</div>${r.obs?`<div class="sub">${esc(r.obs)}</div>`:''}</td>
-    <td class="n" data-l="Qtd">${fmt(r.qty)} ${esc(r.um)}${r.pieces.length>1?`<div class="sub">${r.pieces.length} lances</div>`:''}</td>
-    <td data-l="Status"><span class="st ${ST[r.st][1]}">${ST[r.st][0]}</span>${r.st==='tr'?`<div class="sub">de ${esc(fname(r.via))}</div>`:''}${r.left.length?`<div class="sub wrn">faltam: ${r.left.map(fmt).join(' + ')} m</div>`:''}</td>
-    <td data-l="Atendimento">${r.al.length?alloc(r.al):`<span class="sub">${r.big?`Maior lote: ${fmt(r.big.disp)} m em ${esc(fname(r.big.f))}`:'Código sem saldo em nenhuma filial'}</span>`}</td>
+    <td class="n" data-l="Qtd">${fmt(r.qty)} ${esc(r.um)}${r.pieces.length>1?`<div class="sub">${r.pieces.length} ${r.roll?'rolos':'lances'}</div>`:''}</td>
+    <td data-l="Status"><span class="st ${ST[r.st][1]}">${ST[r.st][0]}</span>${r.st==='tr'?`<div class="sub">de ${esc(fname(r.via))}</div>`:''}${r.left.length?`<div class="sub wrn">faltam ${fmt(r.left.reduce((a,b)=>a+b,0))} m${r.left.length>1?` (${r.left.length} lances)`:''}</div>`:''}</td>
+    <td data-l="Atendimento">${r.al.length?alloc(r.al,r.roll):`<span class="sub">${r.big?`Maior lote: ${fmt(r.big.disp)} m em ${esc(fname(r.big.f))}`:'Código sem saldo em nenhuma filial'}</span>`}</td>
     <td data-l="Alertas">${r.urg?urgBox(r.urg,r.st!=='ok'):''}
       ${r.sim?`<div class="box sim"><span class="t">SIMILAR · ${esc(r.sim.cod)}</span>${esc(r.sim.desc)}${r.sim.down?'<br><b class="wrn">Atenção: pedido é ATOX e o similar não é — confirmar com o cliente.</b>':''}
-        <div style="margin-top:6px"><span class="st ${ST[r.sim.st][1]}">${r.sim.st==='ok'?'Atende na prioritária':'Transferir de '+esc(fname(r.sim.via))}</span></div><div style="margin-top:6px">${alloc(r.sim.al)}</div></div>
+        <div style="margin-top:6px"><span class="st ${ST[r.sim.st][1]}">${r.sim.st==='ok'?'Atende na prioritária':'Transferir de '+esc(fname(r.sim.via))}</span></div><div style="margin-top:6px">${alloc(r.sim.al,r.roll)}</div></div>
         ${r.sim.urgP?urgBox(r.sim.urgP,r.sim.st!=='ok'):''}`:''}
       ${!r.urg&&!r.sim?'<span class="sub">—</span>':''}</td></tr>`).join('')}
   </tbody></table></div></section>`;
